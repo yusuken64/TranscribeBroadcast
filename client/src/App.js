@@ -10,8 +10,11 @@ function App() {
       id: 1,
       speaker: 'System',
       text: 'Waiting for transcription from the audio stream...',
+      timestamp: new Date().toISOString(),
     },
   ]);
+  const [now, setNow] = useState(Date.now());
+  const [timelineWindowSeconds, setTimelineWindowSeconds] = useState(120);
 
   const audioRef = useRef(null);
   const wsRef = useRef(null);
@@ -22,6 +25,11 @@ function App() {
       chatWindowRef.current.scrollTop = chatWindowRef.current.scrollHeight;
     }
   }, [chatMessages]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const wsUrl = 'ws://localhost:5000';
@@ -41,6 +49,7 @@ function App() {
             speaker: message.speaker,
             text: message.text,
             segmentUrl: message.segmentUrl || null,
+            timestamp: message.timestamp || new Date().toISOString(),
           },
         ]);
       } catch (error) {
@@ -130,6 +139,33 @@ function App() {
     }
   };
 
+  const timelineWindowStart = now - timelineWindowSeconds * 1000;
+  const timelineWindowEnd = now + 5 * 1000;
+  const timelineDuration = timelineWindowEnd - timelineWindowStart;
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  const timelineItems = chatMessages
+    .filter((message) => message.speaker !== 'System' && message.timestamp)
+    .map((message) => {
+      const timestampMs = new Date(message.timestamp).getTime();
+      const clampedMs = Math.min(Math.max(timestampMs, timelineWindowStart), timelineWindowEnd);
+      const left = ((clampedMs - timelineWindowStart) / timelineDuration) * 100;
+      return {
+        ...message,
+        timestampMs,
+        left,
+        isPast: timestampMs < timelineWindowStart,
+        isFuture: timestampMs > timelineWindowEnd,
+        formattedTime: formatTime(message.timestamp),
+      };
+    })
+    .filter((item) => item.timestampMs >= timelineWindowStart && item.timestampMs <= now);
+
   return (
     <div className="app-container">
       <div className="app-layout">
@@ -176,7 +212,10 @@ function App() {
           <div className="chat-window" ref={chatWindowRef}>
             {chatMessages.map((message) => (
               <div key={message.id} className="chat-message">
-                <span className="chat-speaker">{message.speaker}</span>
+                <div className="chat-message-header">
+                  <span className="chat-speaker">{message.speaker}</span>
+                  <span className="chat-timestamp">{formatTime(message.timestamp)}</span>
+                </div>
                 <p className="chat-message-body">{message.text}</p>
                 {message.segmentUrl && (
                   <p>
@@ -190,6 +229,42 @@ function App() {
           </div>
         </aside>
       </div>
+
+      <section className="timeline-panel">
+        <div className="timeline-header">
+          <div>
+            <h2>Live timeline</h2>
+            <p className="timeline-note">Broadcast events placed by timestamp; track follows real time.</p>
+          </div>
+          <div className="timeline-controls">
+            <div className="timeline-labels">
+              <span>{formatTime(timelineWindowStart)}</span>
+              <span>Now</span>
+            </div>
+            <div className="timeline-buttons">
+              <button onClick={() => setTimelineWindowSeconds(60)}>1m</button>
+              <button onClick={() => setTimelineWindowSeconds(300)}>5m</button>
+              <button onClick={() => setTimelineWindowSeconds(600)}>10m</button>
+              <button onClick={() => setTimelineWindowSeconds(1800)}>30m</button>
+              <button onClick={() => setTimelineWindowSeconds(3600)}>1h</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="timeline-track">
+          <div className="timeline-current-line" />
+          {timelineItems.map((item) => (
+            <div
+              key={item.id}
+              className={`timeline-item ${item.isPast ? 'timeline-item-past' : ''} ${item.isFuture ? 'timeline-item-future' : ''}`}
+              style={{ left: `${item.left}%` }}
+              title={`${item.speaker} @ ${item.formattedTime}: ${item.text}`}
+            >
+              <div className="timeline-dot" />
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

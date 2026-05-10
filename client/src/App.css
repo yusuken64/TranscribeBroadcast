@@ -136,24 +136,145 @@ p {
 }
 
 .chat-message {
-  padding: 4px;
-  border-radius: 4px;
+  padding: 0.85rem 0.9rem;
+  border-radius: 12px;
   background: #f8fafc;
   border: 1px solid #e5e7eb;
   text-align: left;
 }
 
+.chat-message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.45rem;
+}
+
 .chat-speaker {
-  display: block;
+  display: inline-block;
   font-size: 0.88rem;
   color: #2563eb;
   font-weight: 700;
+}
+
+.chat-timestamp {
+  display: inline-block;
+  font-size: 0.82rem;
+  color: #6b7280;
 }
 
 .chat-message-body {
   padding: 0px;
   border-radius: 2px;
   margin: 0px;
+}
+
+.timeline-panel {
+  margin-top: 1.5rem;
+  background: white;
+  padding: 1.5rem 1.5rem 1.75rem;
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.06);
+}
+
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.timeline-header h2 {
+  margin: 0;
+  color: #111827;
+}
+
+.timeline-note {
+  margin: 0.5rem 0 0;
+  color: #6b7280;
+  font-size: 0.95rem;
+}
+
+.timeline-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.timeline-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  min-width: 220px;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.timeline-buttons {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.timeline-buttons button {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  color: #374151;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.timeline-buttons button:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.timeline-track {
+  position: relative;
+  height: 90px;
+  border-radius: 18px;
+  background: linear-gradient(90deg, #eff6ff 0%, #eff6ff 100%);
+  border: 1px solid #d1d5db;
+  overflow: hidden;
+}
+
+.timeline-current-line {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2px;
+  background: #2563eb;
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.25);
+}
+
+.timeline-item {
+  position: absolute;
+  bottom: 8px;
+  transform: translateX(-50%);
+}
+
+.timeline-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 2px solid white;
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.18);
+}
+
+.timeline-item-past .timeline-dot {
+  background: #60a5fa;
+}
+
+.timeline-item-future .timeline-dot {
+  background: #dbeafe;
+  border-color: #93c5fd;
 }
 
 @media (max-width: 900px) {
