@@ -27,3 +27,4 @@ ehthumbs.db
 
 # Editor folders
 .vscode/
+/server/segments

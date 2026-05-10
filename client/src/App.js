@@ -40,6 +40,7 @@ function App() {
             id: Date.now(),
             speaker: message.speaker,
             text: message.text,
+            segmentUrl: message.segmentUrl || null,
           },
         ]);
       } catch (error) {
@@ -103,6 +104,32 @@ function App() {
     }
   };
 
+  const handleStop = async () => {
+    try {
+      const response = await fetch('/api/stream/stop', {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setStatus(`Error stopping stream: ${data.error}`);
+        return;
+      }
+
+      setIsListening(false);
+      setStatus('Stream stopped.');
+      setCurrentUrl('');
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+    } catch (error) {
+      console.error('Error stopping stream:', error);
+      setStatus('Failed to stop stream. Check the server and try again.');
+    }
+  };
+
   return (
     <div className="app-container">
       <div className="app-layout">
@@ -120,7 +147,14 @@ function App() {
               onChange={(event) => setStreamUrl(event.target.value)}
               placeholder="https://broadcastify.cdnstream1.com/41557"
             />
-            <button type="submit">Start Listening</button>
+            <div className="stream-buttons">
+              <button type="submit" disabled={isListening}>
+                Start Listening
+              </button>
+              <button type="button" onClick={handleStop} disabled={!isListening}>
+                Stop Listening
+              </button>
+            </div>
           </form>
 
           <p className="hint">
@@ -144,6 +178,13 @@ function App() {
               <div key={message.id} className="chat-message">
                 <span className="chat-speaker">{message.speaker}</span>
                 <p>{message.text}</p>
+                {message.segmentUrl && (
+                  <p>
+                    <a href={message.segmentUrl} target="_blank" rel="noreferrer">
+                      Open segment WAV
+                    </a>
+                  </p>
+                )}
               </div>
             ))}
           </div>

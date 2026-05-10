@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const https = require('https');
 const { spawn } = require('child_process');
@@ -8,8 +9,15 @@ const WebSocket = require('ws');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const SEGMENTS_DIR = path.join(__dirname, 'segments');
+let segmentIndex = 0;
+
+if (!fs.existsSync(SEGMENTS_DIR)) {
+  fs.mkdirSync(SEGMENTS_DIR, { recursive: true });
+}
 
 app.use(express.json());
+app.use('/segments', express.static(SEGMENTS_DIR));
 
 // Create HTTP server and WebSocket server
 const server = http.createServer(app);
@@ -19,6 +27,157 @@ let currentWsClients = new Set();
 let currentStream = null;
 let isListening = false;
 let ffmpegProcess = null;
+
+const SAMPLE_RATE = 16000;
+const CHANNELS = 1;
+const BYTES_PER_SAMPLE = 2;
+const FRAME_MS = 30;
+const FRAME_SAMPLES = (SAMPLE_RATE * FRAME_MS) / 1000;
+const FRAME_BYTES = FRAME_SAMPLES * BYTES_PER_SAMPLE;
+const ENERGY_THRESHOLD = 400;
+const MIN_SPEECH_FRAMES = 2;
+const SILENCE_TO_CUT_MS = 900;
+const SILENCE_FRAMES_TO_CUT = Math.ceil(SILENCE_TO_CUT_MS / FRAME_MS);
+const PRE_SPEECH_BUFFER_MS = 300;
+const PRE_SPEECH_FRAMES = Math.ceil(PRE_SPEECH_BUFFER_MS / FRAME_MS);
+
+let audioFrameBuffer = Buffer.alloc(0);
+let preSpeechBuffer = [];
+let activeSegmentBuffer = [];
+let segmentStartTime = null;
+let silenceFrameCount = 0;
+let speechFrameCount = 0;
+let inSegment = false;
+
+function getFrameRms(frameBuffer) {
+  const sampleCount = frameBuffer.length / BYTES_PER_SAMPLE;
+  let sumSq = 0;
+
+  for (let offset = 0; offset < frameBuffer.length; offset += BYTES_PER_SAMPLE) {
+    const sample = frameBuffer.readInt16LE(offset);
+    sumSq += sample * sample;
+  }
+
+  return Math.sqrt(sumSq / sampleCount);
+}
+
+function pushPreSpeechFrame(frame) {
+  preSpeechBuffer.push(frame);
+  if (preSpeechBuffer.length > PRE_SPEECH_FRAMES) {
+    preSpeechBuffer.shift();
+  }
+}
+
+function startSegment(frame) {
+  inSegment = true;
+  segmentStartTime = new Date().toISOString();
+  silenceFrameCount = 0;
+  activeSegmentBuffer = [];
+
+  if (preSpeechBuffer.length > 0) {
+    activeSegmentBuffer.push(...preSpeechBuffer);
+  }
+
+  activeSegmentBuffer.push(frame);
+  broadcastMessage('System', `Segment started at ${segmentStartTime}`);
+}
+
+function createWavHeader(dataLength) {
+  const header = Buffer.alloc(44);
+  const byteRate = SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE;
+  const blockAlign = CHANNELS * BYTES_PER_SAMPLE;
+
+  header.write('RIFF', 0, 4, 'ascii');
+  header.writeUInt32LE(36 + dataLength, 4);
+  header.write('WAVE', 8, 4, 'ascii');
+  header.write('fmt ', 12, 4, 'ascii');
+  header.writeUInt32LE(16, 16); // PCM subchunk size
+  header.writeUInt16LE(1, 20); // audio format PCM
+  header.writeUInt16LE(CHANNELS, 22);
+  header.writeUInt32LE(SAMPLE_RATE, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(BYTES_PER_SAMPLE * 8, 34);
+  header.write('data', 36, 4, 'ascii');
+  header.writeUInt32LE(dataLength, 40);
+
+  return header;
+}
+
+function writeSegmentWav(segmentBuffer) {
+  const filename = `segment-${Date.now()}-${segmentIndex++}.wav`;
+  const filepath = path.join(SEGMENTS_DIR, filename);
+  const header = createWavHeader(segmentBuffer.length);
+  const wavBuffer = Buffer.concat([header, segmentBuffer]);
+
+  fs.writeFileSync(filepath, wavBuffer);
+  console.log(`WAV segment written: ${filepath}`);
+  broadcastMessage('System', `Saved segment file: ${filename}`, {
+    segmentUrl: `/segments/${filename}`,
+    filename,
+  });
+}
+
+function finishSegment() {
+  if (!inSegment || activeSegmentBuffer.length === 0) {
+    return;
+  }
+
+  const segmentBuffer = Buffer.concat(activeSegmentBuffer);
+  const durationSeconds = segmentBuffer.length / (SAMPLE_RATE * BYTES_PER_SAMPLE);
+  const segmentEndTime = new Date().toISOString();
+
+  broadcastMessage('System', `Segment ended at ${segmentEndTime} (${durationSeconds.toFixed(2)}s)`);
+  console.log(`Segment ready: ${durationSeconds.toFixed(2)}s, ${segmentBuffer.length} bytes`);
+
+  writeSegmentWav(segmentBuffer);
+
+  // TODO: Send `segmentBuffer` to transcription service here.
+  // Example: sendToTranscriptionService(segmentBuffer);
+
+  activeSegmentBuffer = [];
+  inSegment = false;
+  silenceFrameCount = 0;
+  speechFrameCount = 0;
+  preSpeechBuffer = [];
+}
+
+function processAudioChunk(chunk) {
+  audioFrameBuffer = Buffer.concat([audioFrameBuffer, chunk]);
+
+  while (audioFrameBuffer.length >= FRAME_BYTES) {
+    const frame = audioFrameBuffer.slice(0, FRAME_BYTES);
+    audioFrameBuffer = audioFrameBuffer.slice(FRAME_BYTES);
+    const rms = getFrameRms(frame);
+    const isSpeech = rms >= ENERGY_THRESHOLD;
+
+    if (isSpeech) {
+      speechFrameCount += 1;
+      silenceFrameCount = 0;
+
+      if (!inSegment && speechFrameCount >= MIN_SPEECH_FRAMES) {
+        startSegment(frame);
+      } else if (inSegment) {
+        activeSegmentBuffer.push(frame);
+      }
+
+      pushPreSpeechFrame(frame);
+    } else {
+      speechFrameCount = 0;
+
+      if (inSegment) {
+        activeSegmentBuffer.push(frame);
+        silenceFrameCount += 1;
+
+        if (silenceFrameCount > SILENCE_FRAMES_TO_CUT) {
+          finishSegment();
+        }
+      } else {
+        pushPreSpeechFrame(frame);
+      }
+    }
+  }
+}
 
 // Handle WebSocket connections
 wss.on('connection', (ws) => {
@@ -35,8 +194,8 @@ wss.on('connection', (ws) => {
   });
 });
 
-function broadcastMessage(speaker, text) {
-  const message = JSON.stringify({ speaker, text, timestamp: new Date().toISOString() });
+function broadcastMessage(speaker, text, extra = {}) {
+  const message = JSON.stringify({ speaker, text, timestamp: new Date().toISOString(), ...extra });
   currentWsClients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(message);
@@ -48,12 +207,12 @@ function startListeningToStream(url) {
   console.log(`Starting FFmpeg for stream: ${url}`);
   broadcastMessage('System', `Connecting to stream: ${url}`);
 
-  // Spawn FFmpeg process
+  // Spawn FFmpeg process and produce raw PCM audio for frame-based VAD
   ffmpegProcess = spawn(ffmpegPath, [
     '-i', url,
-    '-f', 'wav',
+    '-f', 's16le',
     '-ac', '1',
-    '-ar', '16000',
+    '-ar', `${SAMPLE_RATE}`,
     'pipe:1'
   ]);
 
@@ -71,11 +230,10 @@ function startListeningToStream(url) {
     // Log every 100KB received
     if (bytesReceived % (100 * 1024) < chunk.length) {
       console.log(`Stream: ${(bytesReceived / 1024).toFixed(1)} KB received`);
-      broadcastMessage('Transcriber', `[Receiving audio data: ${(bytesReceived / 1024).toFixed(1)} KB]`);
+      //broadcastMessage('Transcriber', `[Receiving audio data: ${(bytesReceived / 1024).toFixed(1)} KB]`);
     }
 
-    // TODO: Send audio chunk to transcription service here
-    // Example: sendToTranscriptionService(chunk);
+    processAudioChunk(chunk);
   });
 
   // Handle FFmpeg stderr (for logging/debugging)
@@ -89,6 +247,10 @@ function startListeningToStream(url) {
   // Handle FFmpeg process close/exit
   ffmpegProcess.on('close', (code) => {
     console.log(`FFmpeg process exited with code ${code}`);
+    if (inSegment) {
+      finishSegment();
+    }
+
     if (isListening) {
       broadcastMessage('System', `Stream ended (FFmpeg exit code: ${code})`);
       isListening = false;
@@ -130,6 +292,10 @@ app.post('/api/stream/start', (req, res) => {
 app.post('/api/stream/stop', (req, res) => {
   isListening = false;
   currentStream = null;
+
+  if (inSegment) {
+    finishSegment();
+  }
 
   // Kill the FFmpeg process
   if (ffmpegProcess) {
