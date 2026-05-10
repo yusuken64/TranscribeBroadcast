@@ -6,10 +6,12 @@ const https = require('https');
 const { spawn } = require('child_process');
 const ffmpegPath = require('ffmpeg-static');
 const WebSocket = require('ws');
+const { nodewhisper } = require('nodejs-whisper');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const SEGMENTS_DIR = path.join(__dirname, 'segments');
+const WHISPER_MODEL = process.env.WHISPER_MODEL || 'tiny';
 let segmentIndex = 0;
 
 if (!fs.existsSync(SEGMENTS_DIR)) {
@@ -79,7 +81,7 @@ function startSegment(frame) {
   }
 
   activeSegmentBuffer.push(frame);
-  broadcastMessage('System', `Segment started at ${segmentStartTime}`);
+  //broadcastMessage('System', `Segment started at ${segmentStartTime}`);
 }
 
 function createWavHeader(dataLength) {
@@ -112,10 +114,113 @@ function writeSegmentWav(segmentBuffer) {
 
   fs.writeFileSync(filepath, wavBuffer);
   console.log(`WAV segment written: ${filepath}`);
-  broadcastMessage('System', `Saved segment file: ${filename}`, {
-    segmentUrl: `/segments/${filename}`,
-    filename,
-  });
+  // broadcastMessage('System', `Saved segment file: ${filename}`, {
+  //   segmentUrl: `/segments/${filename}`,
+  //   filename,
+  // });
+
+  return filepath;
+}
+
+async function transcribeSegment(wavPath) {
+  try {
+    console.log(`Starting transcription of ${path.basename(wavPath)} with model: ${WHISPER_MODEL}`);
+    const result = await nodewhisper(wavPath, {
+      modelName: 'base.en',
+
+      whisperOptions: {
+        // cleaner output
+        outputInText: true,
+        outputInVtt: false,
+        outputInSrt: false,
+        outputInCsv: false,
+
+        // remove timestamps in transcript
+        noTimestamps: true,
+        nt: true,              // <-- THIS is the real flag
+        np: true,              // optional: no prints (cleaner output)
+        word_timestamps: false,
+        
+        // better segmentation
+        splitOnWord: true,
+
+        // improve dispatch/radio audio handling
+        vad: true,
+
+        // optional tuning
+        wordTimestamps: false,
+        translateToEnglish: false,
+      },
+
+      removeWavFileAfterTranscription: false,
+
+      logger: {
+        log: (...args) => console.log(...args),
+        debug: (...args) => console.debug(...args),
+        warn: (...args) => console.warn(...args),
+        error: (...args) => console.error(...args),
+      },
+    });
+
+    const raw = (result || '').trim();
+
+    if (!raw) {
+
+      const now = new Date().toLocaleString();
+
+      broadcastMessage(
+        `[${now}] (0.0s)\n[No speech detected]`
+      );
+
+    } else {
+
+      // Match:
+      // [00:00:00.000 --> 00:00:02.080]
+      // transcript text
+
+      const match = raw.match(
+        /\[(\d+):(\d+):([\d.]+)\s*-->\s*(\d+):(\d+):([\d.]+)\]\s*([\s\S]*)/
+      );
+
+      let durationSeconds = 0;
+      let transcript = raw;
+
+      if (match) {
+
+        const startHours = parseInt(match[1]);
+        const startMinutes = parseInt(match[2]);
+        const startSeconds = parseFloat(match[3]);
+
+        const endHours = parseInt(match[4]);
+        const endMinutes = parseInt(match[5]);
+        const endSeconds = parseFloat(match[6]);
+
+        const startTotal =
+          startHours * 3600 +
+          startMinutes * 60 +
+          startSeconds;
+
+        const endTotal =
+          endHours * 3600 +
+          endMinutes * 60 +
+          endSeconds;
+
+        durationSeconds = endTotal - startTotal;
+
+        transcript = match[7].trim();
+      }
+
+      const now = new Date().toLocaleString();
+
+      const timestamp =
+        `[${now}] (${durationSeconds.toFixed(1)}s)`;
+
+      broadcastMessage(timestamp, transcript);
+    }
+  } catch (error) {
+    console.error(`Transcription error:`, error);
+    broadcastMessage('System', `Transcription failed: ${error.message}`);
+  }
 }
 
 function finishSegment() {
@@ -127,13 +232,11 @@ function finishSegment() {
   const durationSeconds = segmentBuffer.length / (SAMPLE_RATE * BYTES_PER_SAMPLE);
   const segmentEndTime = new Date().toISOString();
 
-  broadcastMessage('System', `Segment ended at ${segmentEndTime} (${durationSeconds.toFixed(2)}s)`);
+  //broadcastMessage('System', `Segment ended at ${segmentEndTime} (${durationSeconds.toFixed(2)}s)`);
   console.log(`Segment ready: ${durationSeconds.toFixed(2)}s, ${segmentBuffer.length} bytes`);
 
-  writeSegmentWav(segmentBuffer);
-
-  // TODO: Send `segmentBuffer` to transcription service here.
-  // Example: sendToTranscriptionService(segmentBuffer);
+  const wavPath = writeSegmentWav(segmentBuffer);
+  transcribeSegment(wavPath);
 
   activeSegmentBuffer = [];
   inSegment = false;
