@@ -140,7 +140,7 @@ async function transcribeSegment(wavPath) {
         nt: true,              // <-- THIS is the real flag
         np: true,              // optional: no prints (cleaner output)
         word_timestamps: false,
-        
+
         // better segmentation
         splitOnWord: true,
 
@@ -215,7 +215,9 @@ async function transcribeSegment(wavPath) {
       const timestamp =
         `[${now}] (${durationSeconds.toFixed(1)}s)`;
 
-      broadcastMessage(timestamp, transcript);
+      if (transcript && transcript.trim() !== '[BLANK_AUDIO]') {
+        broadcastMessage(timestamp, transcript.trim());
+      }
     }
   } catch (error) {
     console.error(`Transcription error:`, error);

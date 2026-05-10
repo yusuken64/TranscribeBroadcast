@@ -177,7 +177,7 @@ function App() {
             {chatMessages.map((message) => (
               <div key={message.id} className="chat-message">
                 <span className="chat-speaker">{message.speaker}</span>
-                <p>{message.text}</p>
+                <p className="chat-message-body">{message.text}</p>
                 {message.segmentUrl && (
                   <p>
                     <a href={message.segmentUrl} target="_blank" rel="noreferrer">
