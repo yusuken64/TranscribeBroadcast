@@ -234,6 +234,12 @@ p {
   border-color: #9ca3af;
 }
 
+.timeline-buttons button.active {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
 .timeline-track {
   position: relative;
   height: 90px;

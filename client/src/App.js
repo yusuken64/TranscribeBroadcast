@@ -14,7 +14,7 @@ function App() {
     },
   ]);
   const [now, setNow] = useState(Date.now());
-  const [timelineWindowSeconds, setTimelineWindowSeconds] = useState(120);
+  const [timelineWindowSeconds, setTimelineWindowSeconds] = useState(60);
 
   const audioRef = useRef(null);
   const wsRef = useRef(null);
@@ -242,11 +242,36 @@ function App() {
               <span>Now</span>
             </div>
             <div className="timeline-buttons">
-              <button onClick={() => setTimelineWindowSeconds(60)}>1m</button>
-              <button onClick={() => setTimelineWindowSeconds(300)}>5m</button>
-              <button onClick={() => setTimelineWindowSeconds(600)}>10m</button>
-              <button onClick={() => setTimelineWindowSeconds(1800)}>30m</button>
-              <button onClick={() => setTimelineWindowSeconds(3600)}>1h</button>
+              <button
+                className={timelineWindowSeconds === 60 ? 'timeline-button active' : 'timeline-button'}
+                onClick={() => setTimelineWindowSeconds(60)}
+              >
+                1m
+              </button>
+              <button
+                className={timelineWindowSeconds === 300 ? 'timeline-button active' : 'timeline-button'}
+                onClick={() => setTimelineWindowSeconds(300)}
+              >
+                5m
+              </button>
+              <button
+                className={timelineWindowSeconds === 600 ? 'timeline-button active' : 'timeline-button'}
+                onClick={() => setTimelineWindowSeconds(600)}
+              >
+                10m
+              </button>
+              <button
+                className={timelineWindowSeconds === 1800 ? 'timeline-button active' : 'timeline-button'}
+                onClick={() => setTimelineWindowSeconds(1800)}
+              >
+                30m
+              </button>
+              <button
+                className={timelineWindowSeconds === 3600 ? 'timeline-button active' : 'timeline-button'}
+                onClick={() => setTimelineWindowSeconds(3600)}
+              >
+                1h
+              </button>
             </div>
           </div>
         </div>
