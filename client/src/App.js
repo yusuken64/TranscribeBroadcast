@@ -156,8 +156,10 @@ function App() {
     .filter((message) => message.speaker !== 'System' && message.timestamp)
     .map((message) => {
       const timestampMs = new Date(message.timestamp).getTime();
-      const clampedMs = Math.min(Math.max(timestampMs, timelineWindowStart), timelineWindowEnd);
-      const left = ((clampedMs - timelineWindowStart) / timelineDuration) * 100;
+
+      const left =
+        ((timestampMs - timelineWindowStart) / timelineDuration) * 100;
+
       return {
         ...message,
         timestampMs,
@@ -167,7 +169,10 @@ function App() {
         formattedTime: formatTime(message.timestamp),
       };
     })
-    .filter((item) => item.timestampMs >= timelineWindowStart && item.timestampMs <= now);
+    .filter((item) =>
+      item.timestampMs >= timelineWindowStart &&
+      item.timestampMs <= timelineWindowEnd
+    );
 
   return (
     <div className="app-container">
