@@ -1,74 +1,105 @@
 const path = require('path');
 const { nodewhisper } = require('nodejs-whisper');
 
-const WHISPER_MODEL = process.env.WHISPER_MODEL || 'tiny';
+const WHISPER_MODEL = process.env.WHISPER_MODEL || 'base.en';
 
 async function transcribeSegment(wavPath, broadcastMessage) {
-  try {
-    console.log(`Starting transcription of ${path.basename(wavPath)} with model: ${WHISPER_MODEL}`);
+  console.log(`Starting transcription of ${path.basename(wavPath)} with model: ${WHISPER_MODEL}`);
 
-    const result = await nodewhisper(wavPath, {
-      modelName: WHISPER_MODEL,
-      whisperOptions: {
-        outputInText: true,
-        outputInVtt: false,
-        outputInSrt: false,
-        outputInCsv: false,
-        noTimestamps: true,
-        nt: true,
-        np: true,
-        word_timestamps: false,
-        splitOnWord: true,
-        vad: true,
-        wordTimestamps: false,
-        translateToEnglish: false,
-      },
-      removeWavFileAfterTranscription: false,
-      logger: {
-        log: (...args) => console.log(...args),
-        debug: (...args) => console.debug(...args),
-        warn: (...args) => console.warn(...args),
-        error: (...args) => console.error(...args),
-      },
-    });
+  // Ensure absolute path
+  const absoluteWavPath = path.resolve(wavPath);
 
-    const raw = (result || '').trim();
-    const now = new Date().toLocaleString();
+  // Create a promise with timeout to ensure process termination
+  const transcriptionPromise = nodewhisper(absoluteWavPath, {
+    modelName: WHISPER_MODEL,
+    whisperOptions: {
 
-    if (!raw) {
-      broadcastMessage('System', `[${now}] (0.0s)\n[No speech detected]`);
-      return;
-    }
+      outputInJson: true,
+      outputInText: false,
 
-    const match = raw.match(/\[(\d+):(\d+):([\d.]+)\s*-->\s*(\d+):(\d+):([\d.]+)\]\s*([\s\S]*)/);
-    let durationSeconds = 0;
-    let transcript = raw;
+      outputInVtt: false,
+      outputInSrt: false,
+      outputInCsv: false,
 
-    if (match) {
-      const startHours = parseInt(match[1], 10);
-      const startMinutes = parseInt(match[2], 10);
-      const startSeconds = parseFloat(match[3]);
-      const endHours = parseInt(match[4], 10);
-      const endMinutes = parseInt(match[5], 10);
-      const endSeconds = parseFloat(match[6]);
+      noTimestamps: false,
+      nt: false,
 
-      const startTotal = startHours * 3600 + startMinutes * 60 + startSeconds;
-      const endTotal = endHours * 3600 + endMinutes * 60 + endSeconds;
-      durationSeconds = endTotal - startTotal;
-      transcript = match[7].trim();
-    }
+      np: true,
+      vad: true,
+    },
+    removeWavFileAfterTranscription: false,
+    logger: {
+      log: (...args) => console.log(...args),
+      debug: (...args) => console.debug(...args),
+      warn: (...args) => console.warn(...args),
+      error: (...args) => console.error(...args),
+    },
+  });
 
-    const timestamp = `[${now}] (${durationSeconds.toFixed(1)}s)`;
+  // Add timeout to prevent hanging processes
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('Transcription timeout')), 300000); // 5 minutes timeout
+  });
 
-    if (transcript && transcript.trim() !== '[BLANK_AUDIO]') {
-      broadcastMessage(timestamp, transcript.trim(), {
+  const result = await Promise.race([transcriptionPromise, timeoutPromise]);
+
+  const messages = parseTranscript(result);
+  const now = new Date();
+  const formatted = now.toLocaleString('sv-SE', {
+    year: '2-digit',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).replace(',', '');
+
+
+  messages.forEach(element => {
+
+    broadcastMessage(
+      `[${formatted}] (${element.duration.toFixed(1)}s)`,
+      element.message,
+      {
         segmentUrl: `/segments/${path.basename(wavPath)}`,
-      });
-    }
-  } catch (error) {
-    console.error('Transcription error:', error);
-    broadcastMessage('System', `Transcription failed: ${error.message}`);
+      }
+    );
+  });
+}
+
+function timeToSeconds(time) {
+  const [h, m, s] = time.split(':');
+  return (
+    Number(h) * 3600 +
+    Number(m) * 60 +
+    Number(s)
+  );
+}
+
+function parseTranscript(text) {
+  const regex =
+    /\[(\d{2}:\d{2}:\d{2}\.\d{3})\s-->\s(\d{2}:\d{2}:\d{2}\.\d{3})\]\s(.+)/g;
+
+  const results = [];
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    const start = match[1];
+    const end = match[2];
+    const message = match[3];
+
+    const duration = timeToSeconds(end) - timeToSeconds(start);
+
+    results.push({
+      start,
+      end,
+      duration,
+      message,
+    });
   }
+
+  return results;
 }
 
 module.exports = {

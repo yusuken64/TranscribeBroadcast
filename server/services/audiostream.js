@@ -31,6 +31,7 @@ function createAudioStreamService({ segmentsDir, broadcastMessage, transcribeSeg
   let speechFrameCount = 0;
   let inSegment = false;
   let isListening = false;
+  let isFinishingSegment = false;
 
   function getFrameRms(frameBuffer) {
     const sampleCount = frameBuffer.length / BYTES_PER_SAMPLE;
@@ -62,6 +63,8 @@ function createAudioStreamService({ segmentsDir, broadcastMessage, transcribeSeg
     }
 
     activeSegmentBuffer.push(frame);
+
+    //broadcastMessage('System', `Segment started`);
   }
 
   function createWavHeader(dataLength) {
@@ -86,40 +89,56 @@ function createAudioStreamService({ segmentsDir, broadcastMessage, transcribeSeg
     return header;
   }
 
-  function writeSegmentWav(segmentBuffer) {
+  async function writeSegmentWav(segmentBuffer) {
     const filename = `segment-${Date.now()}-${segmentIndex++}.wav`;
     const filepath = path.join(segmentsDir, filename);
     const header = createWavHeader(segmentBuffer.length);
     const wavBuffer = Buffer.concat([header, segmentBuffer]);
 
-    fs.writeFileSync(filepath, wavBuffer);
+    await fs.promises.writeFile(filepath, wavBuffer);
     console.log(`WAV segment written: ${filepath}`);
     return filepath;
   }
 
   async function finishSegment() {
-    if (!inSegment || activeSegmentBuffer.length === 0) {
+    console.log('finishSegment called');
+
+    if (isFinishingSegment) {
+      console.log('Already finishing segment');
       return;
     }
 
-    const segmentBuffer = Buffer.concat(activeSegmentBuffer);
-    const durationSeconds = segmentBuffer.length / (SAMPLE_RATE * BYTES_PER_SAMPLE);
-    const segmentEndTime = new Date().toISOString();
+    if (!inSegment || activeSegmentBuffer.length === 0) {
+      console.log('No active segment');
+      return;
+    }
 
-    console.log(`Segment ready: ${durationSeconds.toFixed(2)}s, ${segmentBuffer.length} bytes`);
+    isFinishingSegment = true;
 
-    const wavPath = writeSegmentWav(segmentBuffer);
-    await transcribeSegment(wavPath, broadcastMessage);
+    try {
+      console.log('Preparing segment');
 
-    activeSegmentBuffer = [];
-    inSegment = false;
-    silenceFrameCount = 0;
-    speechFrameCount = 0;
-    preSpeechBuffer = [];
+      const segmentBuffer = Buffer.concat(activeSegmentBuffer);
 
-    broadcastMessage('System', `Segment finished at ${segmentEndTime} (${durationSeconds.toFixed(2)}s)`, {
-      segmentUrl: `/segments/${path.basename(wavPath)}`,
-    });
+      activeSegmentBuffer = [];
+      inSegment = false;
+      silenceFrameCount = 0;
+      speechFrameCount = 0;
+      preSpeechBuffer = [];
+
+      const wavPath = await writeSegmentWav(segmentBuffer);
+
+      console.log('Starting transcription');
+
+      await transcribeSegment(wavPath, broadcastMessage);
+
+      console.log('Finished transcription');
+    } catch (error) {
+      console.error('finishSegment error:', error);
+    } finally {
+      console.log('Resetting finish lock');
+      isFinishingSegment = false;
+    }
   }
 
   function processAudioChunk(chunk) {
@@ -222,7 +241,7 @@ function createAudioStreamService({ segmentsDir, broadcastMessage, transcribeSeg
     });
 
     console.log('FFmpeg process started');
-    broadcastMessage('System', 'Stream connected via FFmpeg');
+    //broadcastMessage('System', 'Stream connected via FFmpeg');
   }
 
   async function stopListening() {

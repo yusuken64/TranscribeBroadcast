@@ -12,21 +12,39 @@ async function testTranscription() {
     process.exit(1);
   }
 
+  // Resolve to absolute path
+  const absoluteWavPath = path.resolve(wavPath);
+
   // Check if file exists
-  if (!fs.existsSync(wavPath)) {
-    console.error(`File not found: ${wavPath}`);
+  if (!fs.existsSync(absoluteWavPath)) {
+    console.error(`File not found: ${absoluteWavPath}`);
     process.exit(1);
   }
 
-  console.log(`\n📁 Testing transcription for: ${wavPath}`);
-  console.log(`📊 File size: ${fs.statSync(wavPath).size} bytes`);
+  console.log(`\n📁 Testing transcription for: ${absoluteWavPath}`);
+  console.log(`📊 File size: ${fs.statSync(absoluteWavPath).size} bytes`);
   console.log(`🎤 Starting transcription with tiny model...\n`);
 
   try {
     const startTime = Date.now();
 
-    const result = await nodewhisper(wavPath, {
+    const result = await nodewhisper(absoluteWavPath, {
       modelName: 'tiny',
+          whisperOptions: {
+
+      outputInJson: true,
+      outputInText: false,
+
+      outputInVtt: false,
+      outputInSrt: false,
+      outputInCsv: false,
+
+      noTimestamps: false,
+      nt: false,
+
+      np: true,
+      vad: true,
+    },
       removeWavFileAfterTranscription: false,
       logger: {
         debug: (msg) => console.log(`   [DEBUG] ${msg}`),

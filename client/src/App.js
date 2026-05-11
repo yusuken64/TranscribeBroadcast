@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import StreamControl from './StreamControl';
+import ChatPanel from './ChatPanel';
+import TimelinePanel from './TimelinePanel';
 
 function App() {
   const [streamUrl, setStreamUrl] = useState('https://broadcastify.cdnstream1.com/41557');
@@ -169,127 +172,29 @@ function App() {
   return (
     <div className="app-container">
       <div className="app-layout">
-        <section className="main-panel">
-          <div className="app-header">
-            <h1>Transcribe Broadcast</h1>
-          </div>
-
-          <form className="stream-form" onSubmit={handleStart}>
-            <label htmlFor="stream-url">Audio stream URL</label>
-            <input
-              id="stream-url"
-              type="text"
-              value={streamUrl}
-              onChange={(event) => setStreamUrl(event.target.value)}
-              placeholder="https://broadcastify.cdnstream1.com/41557"
-            />
-            <div className="stream-buttons">
-              <button type="submit" disabled={isListening}>
-                Start Listening
-              </button>
-              <button type="button" onClick={handleStop} disabled={!isListening}>
-                Stop Listening
-              </button>
-            </div>
-          </form>
-
-          <p className="hint">
-            Enter the full stream URL, for example: <code>https://broadcastify.cdnstream1.com/41557</code>
-          </p>
-          {status && <p className="status">{status}</p>}
-
-          {currentUrl && (
-            <div className="audio-player">
-              <audio controls ref={audioRef} src={currentUrl} />
-            </div>
-          )}
-        </section>
-
-        <aside className="chat-panel">
-          <div className="chat-header">
-            <h2>Transcription Chat</h2>
-          </div>
-          <div className="chat-window" ref={chatWindowRef}>
-            {chatMessages.map((message) => (
-              <div key={message.id} className="chat-message">
-                <div className="chat-message-header">
-                  <span className="chat-speaker">{message.speaker}</span>
-                  <span className="chat-timestamp">{formatTime(message.timestamp)}</span>
-                </div>
-                <p className="chat-message-body">{message.text}</p>
-                {message.segmentUrl && (
-                  <p>
-                    <a href={message.segmentUrl} target="_blank" rel="noreferrer">
-                      Open segment WAV
-                    </a>
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </aside>
+        <StreamControl
+          streamUrl={streamUrl}
+          onStreamUrlChange={setStreamUrl}
+          onStart={handleStart}
+          onStop={handleStop}
+          isListening={isListening}
+          status={status}
+          currentUrl={currentUrl}
+          audioRef={audioRef}
+        />
+        <ChatPanel
+          chatMessages={chatMessages}
+          formatTime={formatTime}
+          chatWindowRef={chatWindowRef}
+        />
       </div>
-
-      <section className="timeline-panel">
-        <div className="timeline-header">
-          <div>
-            <h2>Live timeline</h2>
-            <p className="timeline-note">Broadcast events placed by timestamp; track follows real time.</p>
-          </div>
-          <div className="timeline-controls">
-            <div className="timeline-labels">
-              <span>{formatTime(timelineWindowStart)}</span>
-              <span>Now</span>
-            </div>
-            <div className="timeline-buttons">
-              <button
-                className={timelineWindowSeconds === 60 ? 'timeline-button active' : 'timeline-button'}
-                onClick={() => setTimelineWindowSeconds(60)}
-              >
-                1m
-              </button>
-              <button
-                className={timelineWindowSeconds === 300 ? 'timeline-button active' : 'timeline-button'}
-                onClick={() => setTimelineWindowSeconds(300)}
-              >
-                5m
-              </button>
-              <button
-                className={timelineWindowSeconds === 600 ? 'timeline-button active' : 'timeline-button'}
-                onClick={() => setTimelineWindowSeconds(600)}
-              >
-                10m
-              </button>
-              <button
-                className={timelineWindowSeconds === 1800 ? 'timeline-button active' : 'timeline-button'}
-                onClick={() => setTimelineWindowSeconds(1800)}
-              >
-                30m
-              </button>
-              <button
-                className={timelineWindowSeconds === 3600 ? 'timeline-button active' : 'timeline-button'}
-                onClick={() => setTimelineWindowSeconds(3600)}
-              >
-                1h
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="timeline-track">
-          <div className="timeline-current-line" />
-          {timelineItems.map((item) => (
-            <div
-              key={item.id}
-              className={`timeline-item ${item.isPast ? 'timeline-item-past' : ''} ${item.isFuture ? 'timeline-item-future' : ''}`}
-              style={{ left: `${item.left}%` }}
-              title={`${item.speaker} @ ${item.formattedTime}: ${item.text}`}
-            >
-              <div className="timeline-dot" />
-            </div>
-          ))}
-        </div>
-      </section>
+      <TimelinePanel
+        timelineWindowSeconds={timelineWindowSeconds}
+        setTimelineWindowSeconds={setTimelineWindowSeconds}
+        timelineWindowStart={timelineWindowStart}
+        timelineItems={timelineItems}
+        formatTime={formatTime}
+      />
     </div>
   );
 }
