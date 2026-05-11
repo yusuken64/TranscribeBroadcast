@@ -54,3 +54,8 @@ if (process.env.NODE_ENV === 'production') {
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
+process.on('SIGINT', async () => {
+  await audioStreamService.stopListening();
+  process.exit(0);
+});

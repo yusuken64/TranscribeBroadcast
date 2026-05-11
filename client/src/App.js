@@ -170,6 +170,7 @@ function App() {
       };
     })
     .filter((item) =>
+      !item.isPast &&
       item.timestampMs >= timelineWindowStart &&
       item.timestampMs <= timelineWindowEnd
     );
