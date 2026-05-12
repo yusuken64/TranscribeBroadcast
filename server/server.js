@@ -6,6 +6,7 @@ require('./services/database');
 const { createBroadcastService } = require('./services/broadcasting');
 const { createAudioStreamService } = require('./services/audiostream');
 const { transcribeSegment } = require('./services/transcription');
+const transcriptsRoutes = require('./api/transcriptsRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -43,6 +44,8 @@ app.post('/api/stream/stop', async (req, res) => {
 
   res.json({ success: true, message: 'Stream listening stopped' });
 });
+
+app.use('/api/transcripts', transcriptsRoutes);
 
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
