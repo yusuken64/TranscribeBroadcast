@@ -1,6 +1,7 @@
 ﻿const express = require('express');
 const path = require('path');
 const http = require('http');
+require('./services/database');
 
 const { createBroadcastService } = require('./services/broadcasting');
 const { createAudioStreamService } = require('./services/audiostream');

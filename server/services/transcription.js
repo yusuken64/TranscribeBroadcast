@@ -1,5 +1,6 @@
 const path = require('path');
 const { nodewhisper } = require('nodejs-whisper');
+const eventBus = require('./eventBus');
 
 const WHISPER_MODEL = process.env.WHISPER_MODEL || 'base.en';
 
@@ -58,13 +59,13 @@ async function transcribeSegment(wavPath, broadcastMessage) {
 
   messages.forEach(element => {
 
-    broadcastMessage(
-      `[${formatted}] (${element.duration.toFixed(1)}s)`,
-      element.message,
-      {
-        segmentUrl: `/segments/${path.basename(wavPath)}`,
-      }
-    );
+    eventBus.emitTranscript({
+      id: crypto.randomUUID(),
+      timestamp: formatted,
+      duration: element.duration,
+      transcript: element.message,
+      segmentUrl: `/segments/${path.basename(wavPath)}`,
+    });
   });
 }
 

@@ -1,4 +1,5 @@
 const WebSocket = require('ws');
+const eventBus = require('./eventBus');
 
 function createBroadcastService(server) {
   const wss = new WebSocket.Server({ server });
@@ -33,6 +34,16 @@ function createBroadcastService(server) {
       }
     });
   }
+
+  eventBus.onTranscript((event) => {
+    broadcastMessage(
+      `[${event.timestamp}] (${event.duration.toFixed(1)}s)`,
+      event.transcript,
+      {
+        segmentUrl: event.segmentUrl,
+      }
+    );
+  });
 
   return {
     broadcastMessage,
