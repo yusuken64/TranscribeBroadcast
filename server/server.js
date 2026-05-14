@@ -1,7 +1,7 @@
 ﻿const express = require('express');
 const path = require('path');
 const http = require('http');
-require('./services/database');
+const database = require('./services/database');
 
 const { createBroadcastService } = require('./services/broadcasting');
 const { createAudioStreamService } = require('./services/audiostream');
@@ -23,27 +23,10 @@ const audioStreamService = createAudioStreamService({
   transcribeSegment,
 });
 
-app.post('/api/stream/start', (req, res) => {
-  const { url } = req.body;
-
-  if (!url) {
-    return res.status(400).json({ error: 'Stream URL is required' });
-  }
-
-  console.log(`Starting to listen to stream: ${url}`);
-  audioStreamService.startListening(url);
-
-  res.json({ success: true, message: 'Stream listening started', url });
-});
-
-app.post('/api/stream/stop', async (req, res) => {
-  await audioStreamService.stopListening();
-
-  console.log('Stopped listening to stream');
-  broadcastMessage('System', 'Stream stopped');
-
-  res.json({ success: true, message: 'Stream listening stopped' });
-});
+//https://broadcastify.cdnstream1.com/41557
+url = "https://broadcastify.cdnstream1.com/41557";
+console.log(`Starting to listen to stream: ${url}`);
+audioStreamService.startListening(url);
 
 app.use('/api/transcripts', transcriptsRoutes);
 

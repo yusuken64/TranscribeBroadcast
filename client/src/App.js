@@ -5,7 +5,7 @@ import TimelinePanel from './TimelinePanel';
 
 function App() {
   const [streamUrl, setStreamUrl] = useState('https://broadcastify.cdnstream1.com/41557');
-  const [currentUrl, setCurrentUrl] = useState('');
+  const [currentUrl, setCurrentUrl] = useState('https://broadcastify.cdnstream1.com/41557');
   const [status, setStatus] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [chatMessages, setChatMessages] = useState([
@@ -77,71 +77,6 @@ function App() {
     };
   }, []);
 
-  const handleStart = async (event) => {
-    event.preventDefault();
-    const trimmedUrl = streamUrl.trim();
-
-    if (!trimmedUrl) {
-      setStatus('Please enter a valid audio stream URL.');
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/stream/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: trimmedUrl }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setStatus(`Error: ${data.error}`);
-        return;
-      }
-
-      setCurrentUrl(trimmedUrl);
-      setIsListening(true);
-      setStatus(`Listening to ${trimmedUrl}`);
-
-      if (audioRef.current) {
-        audioRef.current.load();
-        audioRef.current.play().catch(() => {
-          setStatus('Stream loaded. Click play if audio does not start automatically.');
-        });
-      }
-    } catch (error) {
-      console.error('Error starting stream:', error);
-      setStatus('Failed to start stream. Check the server and try again.');
-    }
-  };
-
-  const handleStop = async () => {
-    try {
-      const response = await fetch('/api/stream/stop', {
-        method: 'POST',
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        setStatus(`Error stopping stream: ${data.error}`);
-        return;
-      }
-
-      setIsListening(false);
-      setStatus('Stream stopped.');
-      setCurrentUrl('');
-
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
-      }
-    } catch (error) {
-      console.error('Error stopping stream:', error);
-      setStatus('Failed to stop stream. Check the server and try again.');
-    }
-  };
-
   const timelineWindowStart = now - timelineWindowSeconds * 1000;
   const timelineWindowEnd = now + 5 * 1000;
   const timelineDuration = timelineWindowEnd - timelineWindowStart;
@@ -179,10 +114,6 @@ function App() {
     <div className="app-container">
       <div className="app-layout">
         <StreamControl
-          streamUrl={streamUrl}
-          onStreamUrlChange={setStreamUrl}
-          onStart={handleStart}
-          onStop={handleStop}
           isListening={isListening}
           status={status}
           currentUrl={currentUrl}
